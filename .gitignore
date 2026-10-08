@@ -46,15 +46,32 @@ JLinkSettings.ini
 *.exe
 *.msi
 
+# ---- Embedded IDE（VSCode 插件 cl.eide）生成物 ----
+# eide 以 Keil 工程兼容模式接入：工程定义仍以 project.uvprojx 为准
+# 入库：.eide/eide.yml、.eide/env.ini、.eide/files.options.yml、
+#       .vscode/tasks.json、project.code-workspace、.clang-format
+**/build/
+**/.cmsis/
+**/.eide/log/
+**/.eide/*.usr.ctx.json
+**/.eide/.pack/
+# .clangd 内含本机 Keil 绝对路径（-isystemC:\APP\Keil_v5\...），换机即失效，由 eide 重新生成
+.clangd
+
 # ---- 系统与编辑器 ----
 .DS_Store
 Thumbs.db
 desktop.ini
 $RECYCLE.BIN/
-.vscode/
-.idea/
 *.swp
 ~$*
+
+# VSCode：只排除个人调试/缓存配置，构建任务与工程设置要入库
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/extensions.json
+!.vscode/launch.json.example
 
 # 注：不再使用宽泛的 *.txt。JLink 日志已由上面的 JLinkLog.txt 单独排除，
 # 实验说明、烧录记录等 .txt 文档需要入库。

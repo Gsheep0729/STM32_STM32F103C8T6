@@ -5,7 +5,9 @@
 ## 1. 这个仓库是什么
 
 - 硬件：STM32F103C8T6 最小系统板（C8T6，64KB Flash / 20KB SRAM，Medium Density）
-- IDE：Keil MDK（ARM Compiler），工程文件为各目录下的 `project.uvprojx`
+- 开发方式：**VSCode + Embedded IDE（`cl.eide`）负责写代码、编译、烧录；Keil MDK（uVision）负责工程定义与最终验证**，两者并用
+- 单一事实来源是各目录下的 `project.uvprojx`。Embedded IDE 以 **Keil 工程兼容模式**接入（判据：`.eide/env.ini` 里有 `[Target 1] KEIL_OUTPUT_DIR=Objects`，说明 eide 复用 Keil 的输出目录；`.eide/eide.yml` 的 `deviceName: null`、`toolchain: AC5`，器件与编译选项都来自 uvprojx）
+- 烧录器：J-Link（`.eide/eide.yml` 中 `uploader: JLink`）；ST-LINK 走 Keil 的 Debug/Flash Download 设置
 - 固件库：STM32F10x 标准外设库 V3.5.0（`__STM32F10X_STDPERIPH_VERSION` = 0x030500，见 `Start/stm32f10x.h`）
 - 性质：跟随视频课程逐实验推进的学习仓库，代码与笔记同仓、同一次提交
 - 远程：`https://github.com/Gsheep0729/STM32_STM32F103C8T6`，分支 `main`
@@ -20,12 +22,25 @@
   - `lib/` — 标准库外设源码（`stm32f10x_gpio.c` 等）
   - `System/` — 自建工具，如 `Delay.c/.h`
   - `批处理中间文件脚本/keilkill.bat` — 清理中间文件
+  - `.eide/`、`.vscode/tasks.json`、`project.code-workspace`、`.clang-format` — Embedded IDE 接入配置，入库清单见第 3 节
 - 目录名一经提交不再改。笔记标题与目录名可以不同（例：`01工程模板/` 内的笔记叫 `01新建工程.md`），对应关系维护在 `README.md` 的映射表里
 - 笔记 md 与它的 `<同名>.assets/` 图片目录必须位于同一目录下：md 内图片是 `./xxx.assets/image.png` 形式的相对路径，拆开就全断
 
 ## 3. 版本管理规则
 
-跟踪：源码、`project.uvprojx`、`project.uvoptx`、笔记 md、图片 assets、`CLAUDE.md`、`README.md`、`.gitignore`。
+跟踪：源码、`project.uvprojx`、`project.uvoptx`、笔记 md、图片 assets、`CLAUDE.md`、`README.md`、`.gitignore`，以及让双 IDE 配置可复现的这几个文件：
+
+| 文件 | 为什么入库 |
+|---|---|
+| `.eide/eide.yml` | eide 工程状态（分组、toolchain: AC5、uploader: JLink） |
+| `.eide/env.ini` | 记录 `KEIL_OUTPUT_DIR=Objects`，即"以 Keil 兼容模式接入"的凭据 |
+| `.eide/files.options.yml` | 单文件编译选项覆盖 |
+| `.vscode/tasks.json` | build / flash / build and flash / rebuild / clean 五个任务入口 |
+| `project.code-workspace` | 工作区设置与 eide 相关扩展推荐，无本机绝对路径 |
+| `.clang-format` | 代码风格（Microsoft 基准、4 空格、ColumnLimit 0） |
+| 各工程目录内 eide 生成的 `.gitignore` | 与上面的根规则互补，随工程目录一起复制给下个实验 |
+
+不入库的 IDE 生成物：`.clangd`（内含 `-isystemC:\APP\Keil_v5\...` 本机绝对路径，换机即失效，eide 会重新生成）、`.cmsis/`（eide 拷来的 CMSIS 头文件，可再生）、`build/`（eide 输出）、`.eide/log/`、`.eide/*.usr.ctx.json`、`.vscode/launch.json`。
 
 不跟踪（`.gitignore` 已覆盖，不要 `git add -f` 绕过）：
 
@@ -46,13 +61,18 @@
 
 ## 4. 新实验的标准流程
 
-1. 复制上一个实验目录，重命名为 `NN<实验名>`
+1. 复制上一个实验目录，重命名为 `NN<实验名>`；删掉复制过来的 `Objects/`、`Listings/`、`DebugConfig/`、`build/`、`.cmsis/`、`.clangd`
 2. 打开 `project.uvprojx` 确认器件型号、Target 名、输出路径、Include Path 未受复制影响
-3. 修改 `User/main.c`（必要时同步改 `stm32f10x_conf.h` 里启用的外设头文件）
-4. 编译 → 烧录 → **硬件实测**。实测通过才算这个实验完成
-5. 写该目录下的同名笔记 md，截图放 `<同名>.assets/`
-6. 更新 `README.md` 的映射表与进度列
-7. 一个提交，推送 `main`
+3. VSCode 打开该目录 → Embedded IDE 面板「打开 Keil 工程」导入 `project.uvprojx`（兼容模式），确认侧栏出现 Start / lib / User / System 分组
+4. 修改 `User/main.c`（必要时同步改 `stm32f10x_conf.h` 里启用的外设头文件）
+5. **增删源文件只在 Keil 里做**：兼容模式下 `.eide/eide.yml` 由 uvprojx 同步而来，手改 eide.yml 会在下次打开时被覆盖
+6. 编译与烧录：VSCode 命令面板 `EIDE: Build Project` / `EIDE: Upload Device`，或直接用 `.vscode/tasks.json` 里的 build、flash、build and flash、rebuild、clean 五个任务；Keil 侧仍是 F7 编译、F8 下载
+7. **硬件实测**。实测通过才算这个实验完成
+8. 写该目录下的同名笔记 md，截图放 `<同名>.assets/`
+9. 更新 `README.md` 的映射表与进度列
+10. 一个提交，推送 `main`
+
+两边共用 `Objects/` 作为输出目录（`env.ini` 里 `KEIL_OUTPUT_DIR=Objects`），所以**在 Keil 与 VSCode 之间切换后先 Rebuild 再判断现象**，别拿另一边的增量产物说事。`批处理中间文件脚本/keilkill.bat` 按后缀递归删除，会把 eide 的 `build/` 一起清掉——这没问题，只是下次编译要全量重来。
 
 ## 5. 笔记写作规则
 
@@ -101,6 +121,7 @@
 
 - `02GPIO/User/main.c`：初始化的是 `GPIOA` Pin0 并只开了 GPIOA 时钟，主循环里翻转的却是 `GPIOC` Pin13（未开 GPIOC 时钟）。注释写的是 PC13。待用户确认是笔误还是有意为之，**不要自行改动**
 - `03LED闪烁&流水灯&蜂鸣器` 实验未开始，源笔记目录里该 md 为 0 字节空文件，故未入仓
+- Embedded IDE 目前只在 `01工程模板/` 配好，`02GPIO/` 及以后尚未导入；各工程目录的 IDE 配置文件（第 3 节表格里那 7 项）待用户确认后再入库
 - 视频第 1~8 章大纲清单待采集
 - 源笔记目录 `D:\桌面文件\笔记\04_嵌入式开发\STM32(STM32F103C8T6)`：内容已复制入仓，仓库为正本。源目录由用户自行验证图片显示后手动删除，AI 不代删
 - 本机 Shell：Git Bash（POSIX sh），路径含中文与括号，命令行里必须整体加双引号
