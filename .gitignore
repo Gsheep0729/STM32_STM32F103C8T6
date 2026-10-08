@@ -1,35 +1,60 @@
-# Keil MDK 构建输出目录
+# 构建产物清单与 批处理中间文件脚本/keilkill.bat 的删除列表对齐
+# 该脚本会删掉的后缀 = 不该入库的后缀，两边保持一致
+
+# ---- Keil MDK 构建输出目录 ----
 **/Objects/
 **/Listings/
+**/DebugConfig/
 
-# 编译生成的中间文件和结果文件
+# ---- 编译中间文件与结果文件 ----
 *.o
+*.obj
+*.omf
 *.d
 *.crf
-*.htm
-*.dep
-*.lnp
-*.sct
-*.map
-*.lst
+*.__i
+*.iex
 *.axf
 *.elf
 *.hex
 *.bin
-
-# Keil 自动生成的备份和临时文件
+*.map
+*.lst
+*.sct
+*.lnp
+*.dep
+*.plg
+*.rpt
+*.tra
+*.htm
+*.mpf
+*.mpj
 *.bak
 *.tmp
-*.__i
-*.txt
 
-# 个人界面设置文件 (包含窗口布局、断点等，通常不建议加入版本控制)
+# ---- Keil 个人界面与调试器缓存（换台电脑就该重新生成）----
 *.uvguix.*
 *.uvgui.*
+*.bcf
+JLinkLog.txt
+JLinkSettings.ini
 
-# 调试配置缓存
-**/DebugConfig/
+# ---- 压缩包与安装程序（课件资料包，防止误提交大文件）----
+*.zip
+*.rar
+*.7z
+*.exe
+*.msi
 
-# 其他系统/编辑器临时文件
+# ---- 系统与编辑器 ----
 .DS_Store
 Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+.vscode/
+.idea/
+*.swp
+~$*
+
+# 注：不再使用宽泛的 *.txt。JLink 日志已由上面的 JLinkLog.txt 单独排除，
+# 实验说明、烧录记录等 .txt 文档需要入库。

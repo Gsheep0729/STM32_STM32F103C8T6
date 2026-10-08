@@ -30,7 +30,11 @@
 不跟踪（`.gitignore` 已覆盖，不要 `git add -f` 绕过）：
 
 - 目录：`Objects/`、`Listings/`、`DebugConfig/`
-- 文件：`*.o *.d *.crf *.map *.lst *.axf *.htm *.dep *.lnp *.sct *.bak *.tmp *.__i *.uvguix.* *.uvgui.*`
+- 文件：编译中间件与结果（`*.o *.obj *.crf *.d *.axf *.hex *.bin *.map *.lst *.sct *.lnp *.dep *.htm *.__i` 等）、Keil 界面与调试器缓存（`*.uvguix.* *.uvgui.* *.bcf JLinkLog.txt JLinkSettings.ini`）、压缩包与安装程序（`*.zip *.rar *.7z *.exe *.msi`）、系统与编辑器临时文件
+
+`.gitignore` 的产物后缀与 `批处理中间文件脚本/keilkill.bat` 的删除列表一一对齐：**脚本会删的就不入库**。改任一侧要同步另一侧。
+
+不使用宽泛的 `*.txt` 规则（早期版本有），否则实验说明、烧录记录一类要入库的文本会被误伤。
 
 其他约定：
 
