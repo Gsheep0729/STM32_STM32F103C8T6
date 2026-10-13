@@ -55,8 +55,12 @@ JLinkSettings.ini
 **/.eide/log/
 **/.eide/*.usr.ctx.json
 **/.eide/.pack/
+# eide 的"芯片支持包"（DFP）下载目录：默认落在各工程根目录的 .pack/ 下，可再生，不入库
+**/.pack/
 # .clangd 内含本机 Keil 绝对路径（-isystemC:\APP\Keil_v5\...），换机即失效，由 eide 重新生成
 .clangd
+# RTE_Components.h 由 eide 添加芯片支持包时自动生成，内容为空（仅 include guard），可再生
+**/RTE_Components.h
 
 # ---- 系统与编辑器 ----
 .DS_Store
@@ -78,6 +82,9 @@ $RECYCLE.BIN/
 
 # ---- 整理工具与本地脚本（非项目内容，不入库）----
 .workbuddy/
+.workbuddy-ai/
+# Claude Code 本地设置（仅本机；将来若有需要共享的 .claude/settings.json 再单独放行）
+.claude/settings.local.json
 
 # ---- 不入库的源文件（体积大，仅本地保留）----
 *.pptx

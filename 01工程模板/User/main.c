@@ -23,10 +23,10 @@ int  main ()
 	GPIO_Init(GPIOC,&GPIO_InitStructure);
 	
 	// 设置PC13引脚为高电平（熄灭LED）
-	//GPIO_SetBits(GPIOC,GPIO_Pin_13);
+	GPIO_SetBits(GPIOC,GPIO_Pin_13);
 	
 	// 设置PC13引脚为低电平（点亮LED）
-	GPIO_ResetBits(GPIOC,GPIO_Pin_13);
+	//GPIO_ResetBits(GPIOC,GPIO_Pin_13);
 	
 	// 主循环
 	while (1)
