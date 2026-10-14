@@ -754,3 +754,155 @@ uint8_t Key_GetNum(void)										//返回键码：1、2，没按下返回 0
 **遇到的问题与排查**
 
 - **EIDE 编译报 `cannot open source input file "LED.h"`**：新建 `Hardware` 分组后只改了 `project.uvprojx`，而 **EIDE 编译实际用的是 `.eide/eide.yml`，它不会自动从 uvprojx 同步**。修复：在 `eide.yml` 的 `virtualFolder.folders` 补 `Hardware` 分组、`incList` 补 `Hardware`。完整结论见 `CLAUDE.md` 第 4 节第 5 条
+
+## 5.光敏传感器控制蜂鸣器
+
+### 5.1 实验目标
+
+第一次把「输入」和「输出」连成一条闭环：**用光敏传感器读环境光，用蜂鸣器给出反馈**——光弱到一定程度就响，见光就停。同时复用上一个实验建立的模块化结构。
+
+- 对应工程：`05_光敏传感器控制蜂鸣器/`
+- 对照源码：老师源码 `3-5 光敏传感器控制蜂鸣器`（见 `CLAUDE.md` 第 10 节）
+
+### 5.2 硬件接线
+
+![光敏传感器控制蜂鸣器接线图](./02GPIO.assets/27_光敏传感器接线.jpg)
+
+> 图 27：光敏传感器控制蜂鸣器接线图（课件/视频参考图）。面包板下方是蜂鸣器模块（引出 GND / I/O / VCC 三脚），右侧是光敏传感器模块；最小系统板与 ST-LINK 经 SWD 四线相连。
+
+引脚分配（**以老师代码为准**）：
+
+| 器件 | 引脚 | 模式 | 接法 |
+|---|---|---|---|
+| 蜂鸣器模块 | **PB12** | 推挽输出 | I/O 接 PB12；**低电平鸣叫**（与 §3 同一个引脚） |
+| 光敏传感器 DO | **PB13** | **上拉输入（IPU）** | 模块 DO 接 PB13；读到 1 时蜂鸣器响 |
+| 两个模块 | 3V3 / GND | — | VCC 接 3V3、GND 接 GND |
+
+- 蜂鸣器接法与 §3 完全一样（同一个 PB12），**不需要重新接线**
+- 新增的是光敏传感器：把模块的 **DO（数字输出）** 接到 PB13
+
+### 5.3 原理回顾
+
+- **光敏模块的两个输出**：AO 是模拟量、DO 是数字量（见 §8.1）。本实验用 **DO**——模块内部用电压比较器把"光照强度"和电位器设定的阈值做比较，直接给出 0/1
+- **为什么用上拉输入**：模块的 DO 由 LM393 比较器输出，属于开集（开漏）结构，需要上拉电阻才能给出确定的高电平，所以配成 `GPIO_Mode_IPU`（见 §5.1）
+- **闭环**：输入（光敏）→ 判断 → 输出（蜂鸣器）。这是本实验第一次把两者连起来
+
+> 说明：本节把 §5.1 / §8.1 的理论接到本实验，属**辅助讲解**。
+
+### 5.4 参考代码（老师源码 `3-5 光敏传感器控制蜂鸣器`）
+
+```text
+05_光敏传感器控制蜂鸣器/
+├── User/main.c                       ← 主逻辑：读光敏 → 控制蜂鸣器
+└── Hardware/
+    ├── Buzzer.c / Buzzer.h           ← 蜂鸣器模块
+    ├── LightSensor.c / LightSensor.h ← 光敏传感器模块
+    └──（老师工程里还带着 04 的 LED.c/h、Key.c/h，本实验用不到）
+```
+
+**`User/main.c`**
+
+```c
+#include "stm32f10x.h"                  // Device header
+#include "Delay.h"
+#include "Buzzer.h"
+#include "LightSensor.h"
+
+int main(void)
+{
+	/*模块初始化*/
+	Buzzer_Init();			//蜂鸣器初始化
+	LightSensor_Init();		//光敏传感器初始化
+
+	while (1)
+	{
+		if (LightSensor_Get() == 1)		//如果当前光敏输出1
+		{
+			Buzzer_ON();				//蜂鸣器开启
+		}
+		else							//否则
+		{
+			Buzzer_OFF();				//蜂鸣器关闭
+		}
+	}
+}
+```
+
+**`Hardware/LightSensor.c` 的关键部分**
+
+```c
+void LightSensor_Init(void)
+{
+	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);		//开启GPIOB的时钟
+
+	GPIO_InitTypeDef GPIO_InitStructure;
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPU;				//上拉输入
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_13;					//PB13
+	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+	GPIO_Init(GPIOB, &GPIO_InitStructure);
+}
+
+uint8_t LightSensor_Get(void)
+{
+	return GPIO_ReadInputDataBit(GPIOB, GPIO_Pin_13);			//读 PB13 的电平，返回 0 或 1
+}
+```
+
+**`Hardware/Buzzer.c` 的关键部分**
+
+```c
+void Buzzer_Init(void)
+{
+	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);		//开启GPIOB的时钟
+
+	GPIO_InitTypeDef GPIO_InitStructure;
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;			//推挽输出
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_12;					//PB12
+	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+	GPIO_Init(GPIOB, &GPIO_InitStructure);
+
+	GPIO_SetBits(GPIOB, GPIO_Pin_12);							//默认高电平（不响）
+}
+
+void Buzzer_ON(void)  { GPIO_ResetBits(GPIOB, GPIO_Pin_12); }	//低电平 → 响
+void Buzzer_OFF(void) { GPIO_SetBits(GPIOB, GPIO_Pin_12); }		//高电平 → 停
+```
+
+> 注：以上为**老师源码**（对照参考），不是本仓库已实测的代码。
+
+### 5.5 代码关键点
+
+**（1）模块复用的价值**
+
+`Buzzer.c/h` 和上一个实验的 `LED`、`Key` 一样，都是"把引脚细节封起来"。`main.c` 里只出现 `Buzzer_ON()`、`LightSensor_Get()` 这种**表达意图**的名字，看不到任何引脚号——这就是模块化的意义。
+
+**（2）传感器为什么用上拉输入**
+
+模块 DO 是开集输出，没有上拉电阻时高电平不确定，所以用 `GPIO_Mode_IPU`。这和 §4 按键用上拉输入是同一个道理。
+
+**（3）判断逻辑与阈值**
+
+`LightSensor_Get() == 1` 就响。但"读到 1"到底对应亮还是暗，取决于**模块上的电位器**设定的阈值：光敏电阻受光照后阻值变化，经比较器与阈值比较后输出 0/1。**调电位器就能改变触发点**。
+
+### 5.6 预期现象与判定标准
+
+- **预期现象（待实测验证）**：
+  - 遮住光敏传感器（或让环境变暗）→ 蜂鸣器响
+  - 让传感器见光 → 蜂鸣器停
+- **判定标准**：遮光/见光之间能明确切换。若一直响或一直不响，**先旋转模块上的电位器调阈值**，不要急着改代码
+
+### 5.7 注意事项
+
+- **必须在 Keil 和 EIDE 两处都补 `Hardware` 分组**（`Buzzer.c/h`、`LightSensor.c/h`），并把 `.\Hardware` 加进 Include Path 和 `eide.yml` 的 `incList`——**只改一处会编译失败**（§4 已踩过，见 §4.8 与 `CLAUDE.md` 第 4 节第 5 条）
+- 蜂鸣器沿用 §3 的 PB12 接法，**不用重新接线**；新增的是光敏传感器
+- 现象不对先调模块电位器，不要急着改代码
+- 在 Keil 与 VSCode/EIDE 之间切换后先 **Rebuild** 再判断现象
+
+### 5.8 实测记录
+
+- 编译结果：**待实践验证**
+- 烧录结果：**待实践验证**
+- 实际运行现象：**待实践验证**
+- 遇到的问题与排查：**待实践验证**
+
+> 本节按 §6.4 保留「待实践验证」标记，待实际烧录后据真实反馈补写，不以理论预期替代实测结论。
