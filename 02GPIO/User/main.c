@@ -4,7 +4,7 @@
 /**
  * @brief 主函数 - 初始化GPIO并控制LED闪烁
  * 
- * 该函数初始化STM32的GPIOC端口，配置PC13引脚为推挽输出模式，
+ * 该函数初始化STM32的GPIOA端口，配置PA0引脚为推挽输出模式，
  * 用于控制连接到该引脚的LED灯。
  * 
  * @return int 返回程序执行状态，正常情况下不会返回
@@ -30,12 +30,12 @@ int  main ()
 	// 主循环
 	while (1)
 	{
-		// 设置PC13引脚为高电平（熄灭LED）
-		GPIO_SetBits(GPIOC,GPIO_Pin_13);
+		// 设置PA0引脚为高电平（熄灭LED）
+		GPIO_SetBits(GPIOA, GPIO_Pin_0);
 		Delay_ms(500);
 		
-		// 设置PC13引脚为低电平（点亮LED）
-		GPIO_ResetBits(GPIOC,GPIO_Pin_13);
+		// 设置PA0引脚为低电平（点亮LED）
+		GPIO_ResetBits(GPIOA, GPIO_Pin_0);
 		Delay_ms(500);
 	}
 	
