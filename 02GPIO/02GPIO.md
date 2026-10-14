@@ -474,7 +474,7 @@ LED 闪烁那次「初始化 GPIOA 却翻转 GPIOC」就是这三处没对齐，
 
 ### 3.6 预期现象与判定标准
 
-- **预期现象（待实测验证）**：蜂鸣器按「滴、滴、（停顿）」的节奏循环鸣叫
+- **预期现象（已由 §3.8 实测验证）**：蜂鸣器按「滴、滴、（停顿）」的节奏循环鸣叫
 - **判定标准**：
   - 正常：能听到清晰的两短一停顿的节奏
   - 一直响不停：检查是不是把最后那段的 700ms 也写成了 `ResetBits`（应该配 `SetBits` 停止）
@@ -528,3 +528,229 @@ LED 闪烁那次「初始化 GPIOA 却翻转 GPIOC」就是这三处没对齐，
 有源蜂鸣器内部自带振荡源，**只能发出一个固定音调**，做不出真正的爆炸声。这里的「爆炸」是用「长鸣 + 快速断续」模拟出来的。想要真正的音效（扫频、滑音），需要**无源蜂鸣器 + PWM**，那是后续定时器章节的内容。
 
 **实测**：用户烧录后确认成功。
+
+## 4.按键控制LED
+
+### 4.1 实验目标
+
+第一次做「**输入**」：读两个按键的状态，按一下就把对应的 LED 翻转一次。
+同时第一次把代码**拆成模块**（LED、Key 各自一个 `.c/.h`）——这是本章最大的一个台阶。
+
+- 对应工程：`04_按键控制LED/`
+- 对照源码：老师源码 `3-4 按键控制LED`（见 `CLAUDE.md` 第 10 节）
+
+### 4.2 硬件接线
+
+![按键控制LED实验接线图](./02GPIO.assets/24_按键控制LED接线.jpg)
+
+> 图 24：按键控制 LED 实验接线图（课件/视频参考图）。面包板上在原有 LED 的基础上增加两个轻触按键，右侧 ST-LINK 经 SWD 四线（3.3V/SWCLK/SWDIO/GND）与最小系统板相连。
+
+引脚分配（**以老师代码为准**；图中引脚的具体位置看图，但"哪个器件接哪个引脚"以本表为准）：
+
+| 器件 | 引脚 | 模式 | 接法 |
+|---|---|---|---|
+| LED1 | **PA1** | 推挽输出 | 阳极接 3V3，阴极经 1kΩ 接 PA1，**低电平点亮** |
+| LED2 | **PA2** | 推挽输出 | 同上 |
+| 按键1 | **PB1** | **上拉输入（IPU）** | 一端接 PB1，另一端接 **GND**；按下时读到低电平 |
+| 按键2 | **PB11** | 上拉输入（IPU） | 同上 |
+
+- **与前面实验的差别**：第一次使用**输入模式**。上拉输入的含义见 §5.1——引脚内部接了一个上拉电阻，松开时读到高电平；按下时被拉到 GND，读到低电平
+
+### 4.3 原理回顾
+
+- **按键抖动**：机械触点在闭合/断开的瞬间电平会抖几下，直接读会误判，所以要**延时消抖**（见 §7.2 图 15）
+- **输入引脚不能悬空**：悬空时电平不确定，要靠上拉/下拉电阻（或内部上下拉）给出确定电平（见 §5.1）
+- **翻转（Toggle）**：要「按一下变一次状态」，得先读当前输出状态再取反，用 `GPIO_ReadOutputDataBit` 读**输出数据寄存器**
+
+> 说明：本节是把 §5.1 / §7.2 的理论接到本实验上，属**辅助讲解**。
+
+### 4.4 参考代码（老师源码 `3-4 按键控制LED`）
+
+这个实验第一次把代码**拆成模块**，共 4 个源文件：
+
+```text
+04_按键控制LED/
+├── User/main.c          ← 主逻辑：初始化模块 + 读键码 + 翻转 LED
+└── Hardware/            ← 需要新建的分组
+    ├── LED.c / LED.h    ← LED 的初始化与开/关/翻转
+    └── Key.c / Key.h    ← 按键的初始化与键码读取
+```
+
+**`User/main.c`** —— 只关心逻辑，不碰寄存器
+
+```c
+#include "stm32f10x.h"                  // Device header
+#include "Delay.h"
+#include "LED.h"
+#include "Key.h"
+
+uint8_t KeyNum;		//定义用于接收按键键码的变量
+
+int main(void)
+{
+	/*模块初始化*/
+	LED_Init();		//LED初始化
+	Key_Init();		//按键初始化
+
+	while (1)
+	{
+		KeyNum = Key_GetNum();		//获取按键键码
+
+		if (KeyNum == 1)			//按键1按下
+		{
+			LED1_Turn();			//LED1翻转
+		}
+
+		if (KeyNum == 2)			//按键2按下
+		{
+			LED2_Turn();			//LED2翻转
+		}
+	}
+}
+```
+
+**`Hardware/LED.c` 的关键部分**
+
+```c
+void LED_Init(void)
+{
+	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA, ENABLE);		//开启GPIOA的时钟
+
+	GPIO_InitTypeDef GPIO_InitStructure;
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;			//推挽输出
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_1 | GPIO_Pin_2;		//PA1 和 PA2
+	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+	GPIO_Init(GPIOA, &GPIO_InitStructure);						//将PA1和PA2初始化为推挽输出
+
+	GPIO_SetBits(GPIOA, GPIO_Pin_1 | GPIO_Pin_2);				//设置初始化后的默认电平为高（LED 灭）
+}
+
+void LED1_Turn(void)											//LED1 状态翻转
+{
+	if (GPIO_ReadOutputDataBit(GPIOA, GPIO_Pin_1) == 0)			//先读输出寄存器的状态
+	{
+		GPIO_SetBits(GPIOA, GPIO_Pin_1);						//当前是低电平 → 设为高电平
+	}
+	else
+	{
+		GPIO_ResetBits(GPIOA, GPIO_Pin_1);						//当前是高电平 → 设为低电平
+	}
+}
+```
+
+**`Hardware/Key.c` 的关键部分**
+
+```c
+void Key_Init(void)
+{
+	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);		//开启GPIOB的时钟
+
+	GPIO_InitTypeDef GPIO_InitStructure;
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPU;				//上拉输入
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_1 | GPIO_Pin_11;		//PB1 和 PB11
+	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+	GPIO_Init(GPIOB, &GPIO_InitStructure);						//将PB1和PB11初始化为上拉输入
+}
+
+uint8_t Key_GetNum(void)										//返回键码：1、2，没按下返回 0
+{
+	uint8_t KeyNum = 0;
+
+	if (GPIO_ReadInputDataBit(GPIOB, GPIO_Pin_1) == 0)			//PB1 读到低电平 = 按键1按下
+	{
+		Delay_ms(20);											//延时消抖
+		while (GPIO_ReadInputDataBit(GPIOB, GPIO_Pin_1) == 0);	//等待按键松手
+		Delay_ms(20);											//延时消抖
+		KeyNum = 1;												//置键码为1
+	}
+
+	if (GPIO_ReadInputDataBit(GPIOB, GPIO_Pin_11) == 0)			//PB11 同理，对应按键2
+	{
+		Delay_ms(20);
+		while (GPIO_ReadInputDataBit(GPIOB, GPIO_Pin_11) == 0);
+		Delay_ms(20);
+		KeyNum = 2;
+	}
+
+	return KeyNum;			//没有按键按下时，返回默认值 0
+}
+```
+
+> 注：以上为**老师源码**（对照参考），不是本仓库已实测的代码。
+
+### 4.5 代码关键点
+
+**（1）为什么要拆模块**
+
+前两个实验的代码全堆在 `main.c` 里。这次把「LED 怎么用」「按键怎么读」分别封进 `LED.c`、`Key.c`：
+
+- `main.c` 只关心**逻辑**（谁按下 → 谁翻转），不用管寄存器怎么配
+- 以后别的实验要用 LED 或按键，直接把这两个文件搬过去
+- 代价：要在 Keil 里新建一个 **`Hardware` 分组**把这 4 个文件加进去（见 §4.7）
+
+**（2）输入模式：上拉输入（IPU）**
+
+`GPIO_Mode_IPU` 表示引脚内部接了一个上拉电阻：
+
+- 按键**松开** → 引脚被内部拉高 → 读到 **1**
+- 按键**按下** → 引脚被接到 GND → 读到 **0**
+
+所以判断语句写的是 `== 0` 才算按下。
+
+**（3）延时消抖**
+
+机械按键按下/松开的瞬间，电平会在高低之间抖几下（见 §7.2 图 15）。不处理的话，按一次可能被识别成好几次。老师的做法很直接：
+
+```text
+读到低电平 → 延时 20ms（等抖动过去）→ 等松手 → 再延时 20ms → 返回键码
+```
+
+**（4）翻转为什么不能直接取反**
+
+`GPIO_ReadOutputDataBit` 读的是**输出数据寄存器**（记住"我上次让它输出什么"），不是引脚上的实际电平。要翻转就得先读这个状态再取反。
+
+### 4.6 预期现象与判定标准
+
+- **预期现象（已由 §4.8 实测验证）**：
+  - 按一下**按键1** → **LED1** 亮灭状态翻转一次
+  - 按一下**按键2** → **LED2** 亮灭状态翻转一次
+  - 松手后状态保持，不会自己变
+- **判定标准**：
+  - 按一次只变一次 → 消抖有效；按一次变好几次 → 消抖没生效
+  - 按住不放**不会**连续翻转（`Key_GetNum` 是阻塞式，等松手才返回）
+
+### 4.7 注意事项（本节最大的坑）
+
+- **必须在 Keil 里新建 `Hardware` 分组**，加入 `LED.c`、`LED.h`、`Key.c`、`Key.h`；同时把 `.\Hardware` 加到 `Options for Target → C/C++ → Include Paths`。否则编译会报找不到 `LED.h`
+  - 本仓库的 `04_按键控制LED/project.uvprojx` 目前只有 Start / lib / User / System 四个分组，**IncludePath 里也没有 `.\Hardware`**，这一步躲不掉
+- 按 §4 第 5 条，**增删源文件只在 Keil 里做**，不要手改 `.eide/eide.yml`（兼容模式下会被 `uvprojx` 覆盖）
+- `Key_GetNum()` 是**阻塞式**的：按住不放会卡在 `while` 里，主循环后面的代码都不执行。这是老师这一版的写法，后续用外部中断可以解决
+- 在 Keil 与 VSCode/EIDE 之间切换后先 **Rebuild** 再判断现象
+
+### 4.8 实测记录
+
+**编译与烧录**
+
+- 编译：**通过**。用 armcc（AC5）按 EIDE 的实际编译参数（`--apcs=interwork ... -IHardware ... --split_sections`）全量编译 30 个 `.c`（28 个 + `Hardware/LED.c` + `Hardware/Key.c`），**0 错误 0 警告**；`armasm` + `armlink` 通过
+- 烧录：由用户手动完成，未遇到下载问题
+
+**实际运行现象**（依据用户录制的实测视频）
+
+![按键控制 LED 实测画面](./02GPIO.assets/25_按键控制LED实测画面.jpg)
+
+> 图 25：按键控制 LED 实测画面（截自下方实测视频）。面包板上接了两个 LED（红、蓝）和两个轻触按键，画面中手指正按在按键上，两个 LED 的亮灭状态随按键操作发生变化。
+
+- 按一下**按键1** → **LED1** 亮灭翻转一次；按一下**按键2** → **LED2** 亮灭翻转一次
+- 松手后状态保持，符合 §4.6 的判定标准
+
+**实测视频**（用户录制并压缩：4.5 秒 / 1280×720 / 706 KB）
+
+<video src="./02GPIO.assets/26_按键控制LED实测.mp4" controls width="640"></video>
+
+- 视频文件：`02GPIO.assets/26_按键控制LED实测.mp4`
+- 若当前 Markdown 查看器不支持内嵌播放，可直接点开：[26_按键控制LED实测.mp4](./02GPIO.assets/26_按键控制LED实测.mp4)
+- 入库前已**清除视频元数据**（原文件带 GPS 定位信息，不宜提交到公开仓库）
+
+**遇到的问题与排查**
+
+- **EIDE 编译报 `cannot open source input file "LED.h"`**：新建 `Hardware` 分组后只改了 `project.uvprojx`，而 **EIDE 编译实际用的是 `.eide/eide.yml`，它不会自动从 uvprojx 同步**。修复：在 `eide.yml` 的 `virtualFolder.folders` 补 `Hardware` 分组、`incList` 补 `Hardware`。完整结论见 `CLAUDE.md` 第 4 节第 5 条

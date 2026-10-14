@@ -1,37 +1,45 @@
-#include "stm32f10x.h"                  // Device header
+#include "stm32f10x.h"                  // Device header（标准外设库总头文件，uint8_t 也来自这里）
+#include "Delay.h"                      // 延时模块
+#include "LED.h"                        // LED 模块（实现见 Hardware/LED.c）
+#include "Key.h"                        // 按键模块（实现见 Hardware/Key.c）
 
-/**
- * @brief 主函数 - 初始化GPIO并控制LED闪烁
- * 
- * 该函数初始化STM32的GPIOC端口，配置PC13引脚为推挽输出模式，
- * 用于控制连接到该引脚的LED灯。
- * 
- * @return int 返回程序执行状态，正常情况下不会返回
- */
-int  main ()
+/* =====================================================================
+ * 按键控制 LED
+ * ---------------------------------------------------------------------
+ * 本实验第一次把代码"拆成模块"：
+ *   - LED 的操作（初始化、开、关、翻转）封在 Hardware/LED.c 里
+ *   - 按键的读取（初始化、读键码、消抖）封在 Hardware/Key.c 里
+ *   - 这个 main.c 只负责"逻辑"——谁被按下，就让谁翻转
+ * 好处是以后别的实验要用 LED 或按键，直接把这两个模块搬过去就行。
+ *
+ * 硬件接线（详见 02GPIO.md 图 24）：
+ *   LED1 → PA1、LED2 → PA2（推挽输出，低电平点亮）
+ *   按键1 → PB1、按键2 → PB11（上拉输入，按键另一端接 GND）
+ *
+ * 对照来源：老师源码 3-4 按键控制LED（见 CLAUDE.md 第 10 节）
+ * ===================================================================== */
+
+uint8_t KeyNum;		//用于接收按键键码的变量（0 = 没按，1 = 按键1，2 = 按键2）
+
+int main(void)
 {
-	// 使能GPIOC端口时钟
-	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOC,ENABLE);
-	
-	// 配置GPIO初始化结构体
-	GPIO_InitTypeDef GPIO_InitStructure;
-	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_13;
-	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
-	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
-	
-	// 初始化GPIOC的第13号引脚
-	GPIO_Init(GPIOC,&GPIO_InitStructure);
-	
-	// 设置PC13引脚为高电平（熄灭LED）
-	GPIO_SetBits(GPIOC,GPIO_Pin_13);
-	
-	// 设置PC13引脚为低电平（点亮LED）
-	//GPIO_ResetBits(GPIOC,GPIO_Pin_13);
-	
-	// 主循环
+	/*模块初始化：两个模块各自管好自己的引脚，main 不用关心引脚细节*/
+	LED_Init();		//LED初始化：把 PA1、PA2 配成推挽输出，默认输出高电平（灯灭）
+	Key_Init();		//按键初始化：把 PB1、PB11 配成上拉输入
+
+	/*主循环，循环体内的代码会一直循环执行*/
 	while (1)
 	{
-		/* code */
+		KeyNum = Key_GetNum();		//读一次键码（没有按键按下时返回 0）
+
+		if (KeyNum == 1)			//按键1被按下
+		{
+			LED1_Turn();			//LED1 翻转一次（亮的变灭、灭的变亮）
+		}
+
+		if (KeyNum == 2)			//按键2被按下
+		{
+			LED2_Turn();			//LED2 翻转一次
+		}
 	}
-	
 }
