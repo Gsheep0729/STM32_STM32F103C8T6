@@ -1,37 +1,41 @@
-#include "stm32f10x.h"                  // Device header
+#include "stm32f10x.h"                  // Device header（标准外设库总头文件，uint8_t 也来自这里）
+#include "Delay.h"                      // 延时模块（本实验未直接调用，保留以与老师源码一致）
+#include "Buzzer.h"                     // 蜂鸣器模块（实现见 Hardware/Buzzer.c）
+#include "LightSensor.h"                // 光敏传感器模块（实现见 Hardware/LightSensor.c）
 
-/**
- * @brief 主函数 - 初始化GPIO并控制LED闪烁
- * 
- * 该函数初始化STM32的GPIOC端口，配置PC13引脚为推挽输出模式，
- * 用于控制连接到该引脚的LED灯。
- * 
- * @return int 返回程序执行状态，正常情况下不会返回
- */
-int  main ()
+/* =====================================================================
+ * 光敏传感器控制蜂鸣器
+ * ---------------------------------------------------------------------
+ * 本实验第一次把"输入"和"输出"连成一条闭环：
+ *   输入：光敏传感器读环境光 → LightSensor_Get() 得到 0 或 1
+ *   判断：读到 1 就认为"该响了"
+ *   输出：蜂鸣器给出反馈 → Buzzer_ON() / Buzzer_OFF()
+ * 引脚细节都封在 Hardware/ 的两个模块里，这个 main.c 只写"逻辑"。
+ *
+ * 硬件接线（详见 02GPIO.md 图 27）：
+ *   蜂鸣器模块 I/O → PB12（推挽输出，低电平响；与 §3 同一个引脚，不用重接）
+ *   光敏模块   DO  → PB13（上拉输入，读到 1 时蜂鸣器响）
+ *   两模块 VCC → 3V3、GND → GND
+ *
+ * 对照来源：老师源码 3-5 光敏传感器控制蜂鸣器（见 CLAUDE.md 第 10 节）
+ * ===================================================================== */
+
+int main(void)
 {
-	// 使能GPIOC端口时钟
-	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOC,ENABLE);
-	
-	// 配置GPIO初始化结构体
-	GPIO_InitTypeDef GPIO_InitStructure;
-	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_13;
-	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
-	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
-	
-	// 初始化GPIOC的第13号引脚
-	GPIO_Init(GPIOC,&GPIO_InitStructure);
-	
-	// 设置PC13引脚为高电平（熄灭LED）
-	GPIO_SetBits(GPIOC,GPIO_Pin_13);
-	
-	// 设置PC13引脚为低电平（点亮LED）
-	//GPIO_ResetBits(GPIOC,GPIO_Pin_13);
-	
-	// 主循环
+	/*模块初始化：两个模块各自管好自己的引脚，main 不用关心引脚细节*/
+	Buzzer_Init();			//蜂鸣器初始化：把 PB12 配成推挽输出，默认高电平（不响）
+	LightSensor_Init();		//光敏传感器初始化：把 PB13 配成上拉输入
+
+	/*主循环，循环体内的代码会一直循环执行*/
 	while (1)
 	{
-		/* code */
+		if (LightSensor_Get() == 1)		//如果当前光敏输出 1
+		{
+			Buzzer_ON();				//蜂鸣器开启（响）
+		}
+		else							//否则（光敏输出 0）
+		{
+			Buzzer_OFF();				//蜂鸣器关闭（停）
+		}
 	}
-	
 }

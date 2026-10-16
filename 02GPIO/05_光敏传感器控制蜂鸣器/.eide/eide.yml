@@ -55,6 +55,13 @@ virtualFolder:
         - path: System/Delay.c
         - path: System/Delay.h
       folders: []
+    - name: Hardware
+      files:
+        - path: Hardware/Buzzer.c
+        - path: Hardware/Buzzer.h
+        - path: Hardware/LightSensor.c
+        - path: Hardware/LightSensor.h
+      folders: []
 dependenceList: []
 outDir: build
 miscInfo:
@@ -71,6 +78,7 @@ targets:
         - User
         - lib
         - System
+        - Hardware
         - .cmsis/include
         - RTE/_Target 1
       libList: []
